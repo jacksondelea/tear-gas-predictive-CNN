@@ -1,9 +1,3 @@
-"""
-Homework 5 - CNNs
-CS1430 - Computer Vision
-Brown University
-"""
-
 import os
 import random
 import numpy as np
@@ -144,22 +138,15 @@ class Datasets():
 
     def preprocess_fn(self, img):
         """ Preprocess function for ImageDataGenerator. """
-
-        if self.task == '3':
-            img = tf.keras.applications.vgg16.preprocess_input(img)
-        else:
-            img = img / 255.
-            img = self.standardize(img)
+        img = img / 255.
+        img = self.standardize(img)
         return img
 
     def custom_preprocess_fn(self, img):
         """ Custom preprocess function for ImageDataGenerator. """
 
-        if self.task == '3':
-            img = tf.keras.applications.vgg16.preprocess_input(img)
-        else:
-            img = img / 255.
-            img = self.standardize(img)
+        img = img / 255.
+        img = self.standardize(img)
 
         # TODO:
         # Write your own custom data augmentation procedure, creating
@@ -179,15 +166,13 @@ class Datasets():
 
         return img
 
-    def get_data(self, path, is_vgg, shuffle, augment):
+    def get_data(self, path, shuffle, augment):
         """ Returns an image data generator which can be iterated
         through for images and corresponding class labels.
 
         Arguments:
             path - Filepath of the data being imported, such as
                    "../data/train" or "../data/test"
-            is_vgg - Boolean value indicating whether VGG preprocessing
-                     should be applied to the images.
             shuffle - Boolean value indicating whether the data should
                       be randomly shuffled.
             augment - Boolean value indicating whether the data should
@@ -217,8 +202,7 @@ class Datasets():
             data_gen = tf.keras.preprocessing.image.ImageDataGenerator(
                 preprocessing_function=self.preprocess_fn)
 
-        # VGG must take images of size 224x224
-        img_size = 224 if is_vgg else hp.img_size
+        img_size = hp.img_size
 
         classes_for_flow = None
 

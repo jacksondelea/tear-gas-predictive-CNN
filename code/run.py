@@ -1,18 +1,14 @@
-"""
-Homework 5 - CNNs
-CS1430 - Computer Vision
-Brown University
-"""
-
+import glob
 import os
 import sys
 import argparse
 import re
 from datetime import datetime
 import tensorflow as tf
+import csv
 
 import hyperparameters as hp
-from models import YourModel, VGGModel
+from models import YourModel
 from preprocess import Datasets
 from skimage.transform import resize
 from tensorboard_utils import \
@@ -23,6 +19,11 @@ from lime import lime_image
 from skimage.segmentation import mark_boundaries
 from matplotlib import pyplot as plt
 import numpy as np
+
+import glob
+from skimage.io import imread
+from tensorflow.keras.preprocessing.image import img_to_array, load_img
+from tensorflow.keras.models import load_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -71,6 +72,14 @@ def parse_args():
         '--lime-image',
         default='test/Bedroom/image_0003.jpg',
         help='''Name of an image in the dataset to use for LIME evaluation.''')
+    parser.add_argument(
+        '--frames-folder',
+        default='path/to/deduplicated_frames',
+        help='Path to the folder containing deduplicated frames from YouTube videos.')
+    parser.add_argument(
+        '--output-csv',
+        default='confidence_ratings.csv',
+        help='Path to the output CSV file for storing confidence ratings of tear gas canister presence.')
 
     return parser.parse_args()
 
@@ -182,6 +191,32 @@ def test(model, test_data):
         verbose=1,
     )
 
+def classify_video_frames(model, frames_folder, output_csv):
+    frame_files = os.listdir(frames_folder)
+
+    with open(output_csv, mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['Frame', 'Tear_gas_canister_confidence'])
+
+        for frame_file in frame_files:
+            frame_path = os.path.join(frames_folder, frame_file)
+
+            # Preprocess the frame
+            preprocessed_frame = preprocess_frame(frame_path)
+
+            # Expand dimensions to match the input shape for the model
+            input_frame = np.expand_dims(preprocessed_frame, axis=0)
+
+            # Classify the preprocessed frame
+            confidence = model.predict(input_frame)[0][0]
+
+            # Output the confidence rating
+            print(f"Frame {frame_file}: Tear gas canister presence confidence = {confidence:.2f}")
+
+            # Write the results to the CSV file
+            csv_writer.writerow([frame_file, f"{confidence:.2f}"])
+
+
 
 def main():
     """ Main function. """
@@ -190,84 +225,53 @@ def main():
     timestamp = time_now.strftime("%m%d%y-%H%M%S")
     init_epoch = 0
 
-    # If loading from a checkpoint, the loaded checkpoint's directory
-    # will be used for future checkpoints
     if ARGS.load_checkpoint is not None:
         ARGS.load_checkpoint = os.path.abspath(ARGS.load_checkpoint)
 
-        # Get timestamp and epoch from filename
         regex = r"(?:.+)(?:\.e)(\d+)(?:.+)(?:.h5)"
         init_epoch = int(re.match(regex, ARGS.load_checkpoint).group(1)) + 1
         timestamp = os.path.basename(os.path.dirname(ARGS.load_checkpoint))
 
-    # If paths provided by program arguments are accurate, then this will
-    # ensure they are used. If not, these directories/files will be
-    # set relative to the directory of run.py
     if os.path.exists(ARGS.data):
         ARGS.data = os.path.abspath(ARGS.data)
     if os.path.exists(ARGS.load_vgg):
         ARGS.load_vgg = os.path.abspath(ARGS.load_vgg)
 
-    # Run script from location of run.py
     os.chdir(sys.path[0])
 
     datasets = Datasets(ARGS.data, ARGS.task)
 
-    if ARGS.task == '1':
-        model = YourModel()
-        model(tf.keras.Input(shape=(hp.img_size, hp.img_size, 3)))
-        checkpoint_path = "checkpoints" + os.sep + \
-            "your_model" + os.sep + timestamp + os.sep
-        logs_path = "logs" + os.sep + "your_model" + \
-            os.sep + timestamp + os.sep
+    model = YourModel()
+    model(tf.keras.Input(shape=(hp.img_size, hp.img_size, 1)))
+    checkpoint_path = "checkpoints" + os.sep + "your_model" + os.sep + timestamp + os.sep
+    logs_path = "logs" + os.sep + "your_model" + os.sep + timestamp + os.sep
 
-        # Print summary of model
-        model.summary()
-    else:
-        model = VGGModel()
-        checkpoint_path = "checkpoints" + os.sep + \
-            "vgg_model" + os.sep + timestamp + os.sep
-        logs_path = "logs" + os.sep + "vgg_model" + \
-            os.sep + timestamp + os.sep
-        model(tf.keras.Input(shape=(224, 224, 3)))
+    model.summary()
 
-        # Print summaries for both parts of the model
-        model.vgg16.summary()
-        model.head.summary()
-
-        # Load base of VGG model
-        model.vgg16.load_weights(ARGS.load_vgg, by_name=True)
-
-    # Load checkpoints
     if ARGS.load_checkpoint is not None:
-        if ARGS.task == '1':
-            model.load_weights(ARGS.load_checkpoint, by_name=False)
-        else:
-            model.head.load_weights(ARGS.load_checkpoint, by_name=False)
+        model.load_weights(ARGS.load_checkpoint, by_name=False)
 
-    # Make checkpoint directory if needed
     if not ARGS.evaluate and not os.path.exists(checkpoint_path):
         os.makedirs(checkpoint_path)
 
-    # Compile model graph
     model.compile(
         optimizer=model.optimizer,
         loss=model.loss_fn,
-        metrics=["sparse_categorical_accuracy"])
+        metrics=["binary_accuracy"])
 
     if ARGS.evaluate:
         test(model, datasets.test_data)
 
-        # TODO: change the image path to be the image of your choice by changing
-        # the lime-image flag when calling run.py to investigate
-        # i.e. python run.py --evaluate --lime-image misclassified/your_model/Bedroom/Store_predicted.png
         path = ARGS.lime_image
         LIME_explainer(model, path, datasets.preprocess_fn, timestamp)
     else:
         train(model, datasets, checkpoint_path, logs_path, init_epoch)
 
+    # Preprocess and classify the deduplicated frames
+    classify_video_frames(model, ARGS.frames_folder, ARGS.output_csv)
 
 # Make arguments global
 ARGS = parse_args()
 
 main()
+
