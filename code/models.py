@@ -30,7 +30,7 @@ class YourModel(tf.keras.Model):
             Dropout(0.5),
             Dense(256, activation='relu'),
             Dropout(0.5),
-            Dense(1, activation='sigmoid')
+            Dense(1, activation='sigmoid') # 1 output neuron, sigmoid activation for binary classification (?)
         ]
 
     def call(self, x):
