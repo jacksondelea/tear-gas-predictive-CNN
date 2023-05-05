@@ -260,6 +260,7 @@ def main():
         metrics=["binary_accuracy"])
 
     if ARGS.evaluate:
+        #frames_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data') check directory?
         test(model, datasets.test_data)
 
         path = ARGS.lime_image
